@@ -24,6 +24,8 @@ Windows may reject a lock or workbook-open request. Failures are shown in the da
 
 One separate worker handles real desktop requests without holding the policy lock. Stop and status remain responsive. Stop can cancel a request before the worker commits to it; after commitment, the request may still take effect. No new session can start until it finishes. Extra triggers are skipped visibly rather than queued, including if the outstanding request later fails. Shutdown disarms and uses one shared bounded wait for camera and action workers. It cannot terminate a blocked native call. Closed controllers reject restart.
 
-## Reporting
+## Reporting a vulnerability
 
-Use the [central feedback form](https://github.com/Jgolding1998/Jgolding1998/issues/new?template=feedback.yml). Provide the affected version, platform, synthetic reproduction, and expected behavior. Do not post credentials, private images, personal data, or working exploit details involving another person's system. For sensitive vulnerabilities, use the repository host's private vulnerability reporting feature when available before publishing details.
+Use [Security > Report a vulnerability](https://github.com/Jgolding1998/presence-guard/security/advisories/new) to send a private report. Do not submit vulnerability details through the public feedback form.
+
+Include the affected version, platform, expected behavior and a synthetic reproduction. Leave out credentials, personal information and private files.
