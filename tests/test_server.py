@@ -39,9 +39,11 @@ class ServerTests(unittest.TestCase):
         return self.request("POST", path, json.dumps(data).encode(),
                             {"Origin": self.origin, "Content-Type": "application/json", **(headers or {})})
 
-    def raw(self, request):
+    def raw(self, request, half_close=False):
         with socket.create_connection(("127.0.0.1", self.port), timeout=2) as connection:
             connection.sendall(request)
+            if half_close:
+                connection.shutdown(socket.SHUT_WR)
             chunks = []
             while True:
                 try:
@@ -52,6 +54,30 @@ class ServerTests(unittest.TestCase):
                     break
                 chunks.append(chunk)
         return b"".join(chunks)
+
+    def short_post(self, path, data):
+        body = json.dumps({"token": self.token, **data}).encode()
+        headers = (f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{self.port}\r\nOrigin: {self.origin}\r\n"
+                   f"Content-Type: application/json\r\nContent-Length: {len(body) + 1}\r\n\r\n").encode()
+        return self.raw(headers + body, half_close=True)
+
+    def test_short_complete_start_json_does_not_arm(self):
+        self.assertIn(b" 400 ", self.short_post("/api/start", {"mode": "privacy"}))
+        state = self.controller.snapshot()
+        self.assertFalse(state["active"])
+        self.assertFalse(state["lock_armed"])
+        self.assertEqual(state["events"], [])
+
+    def test_short_complete_stop_json_does_not_disarm(self):
+        self.controller.start("privacy")
+        self.assertIn(b" 400 ", self.short_post("/api/stop", {}))
+        state = self.controller.snapshot()
+        self.assertTrue(state["active"])
+        self.assertTrue(state["lock_armed"])
+
+    def test_short_complete_demo_json_does_not_change_counts(self):
+        self.assertIn(b" 400 ", self.short_post("/api/demo", {"people": 2}))
+        self.assertEqual(self.controller.snapshot()["demo_people"], 1)
 
     def test_session_and_assets_are_local_no_store(self):
         for path in ("/", "/app.js", "/style.css", "/favicon.svg", "/api/status", "/api/session"):

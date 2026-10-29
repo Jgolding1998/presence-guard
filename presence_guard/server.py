@@ -248,10 +248,14 @@ def make_handler(controller, token, assets=None):
                 self.send_error(400)
                 return
             deadline = Deadline(self.connection, BODY_SECONDS)
+            length = int(self.headers["Content-Length"])
             try:
-                raw = self.rfile.read(int(self.headers["Content-Length"]))
+                raw = self.rfile.read(length)
             finally:
                 deadline.cancel()
+            if len(raw) != length:
+                self.send_error(400)
+                return
             try:
                 data = parse_json(raw)
                 supplied = data.get("token")
