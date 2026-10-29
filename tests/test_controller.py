@@ -39,6 +39,55 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(state["sheet_armed"])
         self.assertIsNone(service.worker)
 
+    def test_startup_camera_timeout_has_an_accurate_reason_and_keeps_its_deadline(self):
+        for fail in (False, True):
+            with self.subTest(action_failure=fail):
+                entered=threading.Event()
+                def runner(service, session, stop):
+                    entered.set()
+                    stop.wait(2)
+                    return True
+                actions=FakeActions(False, True, fail=fail)
+                clock=Clock()
+                service=Controller(camera=True, actions=actions, clock=clock, camera_runner=runner)
+                try:
+                    service.start("privacy")
+                    self.assertTrue(entered.wait(1))
+                    clock.now=5
+                    service.pulse()
+                    self.assertEqual(actions.calls, [])
+                    clock.now=5.01
+                    service.pulse()
+                    state=service.snapshot()
+                    self.assertEqual(actions.calls, ["lock_camera_fault"])
+                    self.assertEqual(state["last_action"]["reason"], "Camera did not report its first frame within 5 seconds")
+                    self.assertEqual(state["last_action"]["status"], "failed" if fail else "requested")
+                    self.assertIsNone(state["people"])
+                    clock.now=6
+                    service.pulse()
+                    self.assertEqual(len(actions.calls), 1)
+                finally:
+                    service.close()
+
+    def test_camera_timeout_after_a_frame_keeps_the_lost_frames_reason(self):
+        entered=threading.Event()
+        def runner(service, session, stop):
+            service.observe(session, 1)
+            entered.set()
+            stop.wait(2)
+            return True
+        actions=FakeActions(False, True)
+        service=Controller(camera=True, actions=actions, clock=self.clock, camera_runner=runner)
+        try:
+            service.start("privacy")
+            self.assertTrue(entered.wait(1))
+            self.clock.now=5.01
+            service.pulse()
+            self.assertEqual(actions.calls, ["lock_camera_fault"])
+            self.assertEqual(service.snapshot()["last_action"]["reason"], "Camera stopped reporting for over 5 seconds")
+        finally:
+            service.close()
+
     def test_mode_is_mutually_exclusive_and_requires_stop(self):
         state = self.service.start("boss")
         self.assertTrue(state["sheet_armed"])

@@ -12,6 +12,8 @@ A local presence dashboard with three explicit modes: observe people counts, req
 
 The absence rule starts only after at least one person has been detected. Returning resets the timer. Extra-person actions rearm after at least 5 continuous seconds with fewer than two people. Camera failure is shown as an unknown count, never as a claim that you left.
 
+The camera fault timer starts when you press Start. Privacy mode can request a lock if no first frame arrives within five seconds, including during slow camera startup. The action reason distinguishes this from a camera that stopped delivering frames.
+
 ## Try it
 
 1. Install [Python 3.11 or newer](https://www.python.org/downloads/). On Windows, enable **Add python.exe to PATH** in the official installer.

@@ -128,18 +128,20 @@ class Controller:
 
     def _run(self, actions):
         for action in actions:
+            reason = ("Camera did not report its first frame within 5 seconds"
+                      if action == "lock_camera_fault" and self.guard.last_frame is None else ACTION_LABELS[action])
             try:
                 self.actions.run(action)
             except Exception:
                 message = ("Workbook could not be opened. Check the workstation locally" if action == "boss_alert"
                            else "Lock request failed. Windows may still be unlocked; check locally")
-                self.last_action = {"status": "failed", "reason": ACTION_LABELS[action], "message": message}
+                self.last_action = {"status": "failed", "reason": reason, "message": message}
                 self._record(message + ".")
             else:
                 message = ("Simulated: " if self.actions.demo else "Requested: ") + (
                     "synthetic Boss Alert workbook" if action == "boss_alert" else "Windows lock")
                 self.last_action = {"status": "simulated" if self.actions.demo else "requested",
-                                    "reason": ACTION_LABELS[action], "message": message}
+                                    "reason": reason, "message": message}
                 self._record(message)
 
     def _pulse_locked(self):
