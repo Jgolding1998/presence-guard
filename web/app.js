@@ -54,6 +54,7 @@
 
   function render(next) {
     state = next;
+    const closing = state.camera_closing && !state.active;
     $("source-badge").textContent = state.demo ? "DEMO / NO CAMERA" : "LOCAL CAMERA";
     $("demo-controls").hidden = !state.demo;
     for (const option of $("mode").options) option.disabled = !state.allowed_modes.includes(option.value);
@@ -63,17 +64,17 @@
     $("stop").disabled = busy || !connected || !(state.active || state.camera_closing || state.lock_armed || state.sheet_armed);
     $("safetybar").hidden = !(state.active || state.camera_closing);
     $("quick-stop").disabled = busy || !connected;
-    $("session-label").textContent = !connected ? "Connection lost. State unknown." : state.camera_closing ? "Disarmed / camera closing" : state.mode_label + (state.demo ? " / simulation" : " / active");
+    $("session-label").textContent = !connected ? "Connection lost. State unknown." : closing ? "Disarmed / camera closing" : state.mode_label + (state.demo ? " / simulation" : " / active");
     const pill = $("active-pill");
-    pill.textContent = state.camera_closing ? "Closing" : state.active ? "Active" : "Inactive";
+    pill.textContent = closing ? "Closing" : state.active ? "Active" : "Inactive";
     pill.classList.toggle("active", state.active);
     $("mode-label").textContent = state.mode_label + (state.demo ? " / simulation" : "");
     const fault = state.active && state.camera === "fault";
     $("status-orbit").classList.toggle("on", state.active);
     $("status-orbit").classList.toggle("fault", fault);
-    $("status-heading").textContent = state.camera_closing ? "Camera is closing." : !state.active ? "Ready when you are." : fault ? "Camera unavailable." : "Guard is watching.";
-    $("status-detail").textContent = state.camera_closing ? "Actions are disarmed. If this persists, close the terminal before restarting." : !state.active ? "Select a mode, then press Start." : fault ? "People count is unknown. Privacy mode uses the camera fault rule." : state.demo ? "Synthetic observations only. No devices or desktop actions." : "Frames are processed locally, then discarded.";
-    $("camera-state").textContent = state.camera_closing ? "Closing" : !state.active ? "Closed" : fault ? "Fault" : state.camera === "receiving" ? (state.demo ? "Synthetic" : "Receiving") : "Starting";
+    $("status-heading").textContent = closing ? "Camera is closing." : !state.active ? "Ready when you are." : fault ? "Camera unavailable." : "Guard is watching.";
+    $("status-detail").textContent = closing ? "Actions are disarmed. If this persists, close the terminal before restarting." : !state.active ? "Select a mode, then press Start." : fault ? "People count is unknown. Privacy mode uses the camera fault rule." : state.demo ? "Synthetic observations only. No devices or desktop actions." : "Frames are processed locally, then discarded.";
+    $("camera-state").textContent = closing ? "Closing" : !state.active ? "Closed" : fault ? "Fault" : state.camera === "receiving" ? (state.demo ? "Synthetic" : "Receiving") : "Starting";
     $("people-count").textContent = state.people === null ? "Unknown" : String(state.people);
     $("permission-state").textContent = !state.active || state.mode === "observe" ? "Disarmed" : state.demo ? "Simulated" : state.mode === "privacy" ? "Lock armed" : "Workbook armed";
     $("absence-time").firstChild.textContent = fault ? "Unknown " : Number(state.absent_seconds).toFixed(1) + "s ";

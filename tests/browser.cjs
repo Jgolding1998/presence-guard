@@ -108,6 +108,37 @@ async function main() {
     check(await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0), "No browser storage");
     await page.locator("#quick-stop").click();
     await page.waitForFunction(() => document.querySelector("#active-pill").textContent === "Inactive");
+    const fixturePage = await context.newPage();
+    const armedFault = {
+      ...(await (await context.request.get(origin + "/api/status")).json()),
+      demo: false, active: true, mode: "privacy", mode_label: "Privacy lock",
+      allowed_modes: ["observe", "privacy"], camera: "fault", camera_closing: true,
+      people: null, lock_armed: true, sheet_armed: false,
+      events: ['<img src=x onerror="window.injected=true">']
+    };
+    let fixtureState = armedFault;
+    await fixturePage.route("**/api/status", (route) => route.fulfill({json: fixtureState}));
+    await fixturePage.route("**/api/stop", (route) => {
+      fixtureState = {...armedFault, active: false, lock_armed: false};
+      return route.fulfill({json: fixtureState});
+    });
+    await fixturePage.goto(origin);
+    await fixturePage.waitForFunction(() => document.querySelector("#permission-state").textContent === "Lock armed");
+    check(await fixturePage.locator("#active-pill").textContent() === "Active", "Release failure does not claim an armed session is inactive");
+    check((await fixturePage.locator("#session-label").textContent()).includes("Privacy lock"), "Armed fault keeps the active session label");
+    check(await fixturePage.locator("#status-heading").textContent() === "Camera unavailable.", "Armed release failure displays the camera fault");
+    check(!(await fixturePage.locator("#status-detail").textContent()).includes("disarmed"), "Armed release failure never claims actions are disarmed");
+    check(await fixturePage.locator("#camera-state").textContent() === "Fault", "Active failed camera is reported as a fault");
+    check(await fixturePage.locator("#stop").isEnabled(), "Stop remains available for armed release failure");
+    check(await fixturePage.locator("#events img").count() === 0, "Event markup is rendered as text");
+    check(await fixturePage.evaluate(() => window.injected === undefined), "Event markup cannot execute");
+    await fixturePage.screenshot({path: path.join(captureDir, "camera-fault-armed.png"), fullPage: true});
+    await fixturePage.locator("#stop").click();
+    await fixturePage.waitForFunction(() => document.querySelector("#active-pill").textContent === "Closing");
+    check(await fixturePage.locator("#permission-state").textContent() === "Disarmed", "Stopped release failure reports disarmed permissions");
+    check((await fixturePage.locator("#status-detail").textContent()).startsWith("Actions are disarmed."), "Closing text is reserved for a stopped session");
+    await fixturePage.screenshot({path: path.join(captureDir, "camera-cleanup.png"), fullPage: true});
+    await fixturePage.close();
     server.kill();
     await page.waitForFunction(() => document.querySelector("#connection-error").hidden === false);
     check(await page.locator("#start").isDisabled(), "Disconnected controls are disabled");
@@ -115,7 +146,7 @@ async function main() {
     check(pageErrors.length === 0, "No browser script exceptions");
     check(external.length === 0, "No external resources or telemetry");
     check(errors === "", "No server traceback or request logs");
-    console.log(JSON.stringify({checks, pageErrors: pageErrors.length, externalRequests: external.length, screenshots: 2}));
+    console.log(JSON.stringify({checks, pageErrors: pageErrors.length, externalRequests: external.length, screenshots: 4}));
     await context.close();
   } finally {
     if (browser) await browser.close();

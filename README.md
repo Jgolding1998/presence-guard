@@ -39,7 +39,7 @@ In Command Prompt, open the project folder and run one of these commands:
 .venv\Scripts\python.exe -m presence_guard --camera --allow-spreadsheet --open
 ```
 
-The first permits observation only. The other commands permit the corresponding mode in the dropdown; **Start guard** separately arms the selected action for that session. Camera capture begins only after Start. Stop disarms immediately and requests camera release; the interface shows **Closing** until release finishes. Use `--camera-index 1` for a second camera. Both permissions may be supplied at launch, but only one action mode can be active.
+The first permits observation only. The other commands permit the corresponding mode in the dropdown; **Start guard** separately arms the selected action for that session. Camera capture begins only after Start. Stop disarms the session and requests camera release; the interface shows **Closing** until release finishes. Use `--camera-index 1` for a second camera. Both permissions may be supplied at launch, but only one action mode can be active.
 
 Portable manual camera setup:
 
@@ -57,7 +57,7 @@ The camera adapter uses OpenCV's built-in [HOG people detector](https://docs.ope
 
 Privacy mode requests `LockWorkStation` through the Windows API. A successful call is a request, not proof that Windows locked. Action failures remain visible; the shared policy latches a fired action instead of retrying continuously. Boss Alert is an explicitly playful demo, not a way to conceal activity or identify a manager. The workbook contains no real work or personal data.
 
-No real camera, lock, or spreadsheet application is exercised by the automated tests. Check the live detector locally in Observe only mode before deciding whether to arm an action. Some native camera drivers can block; if Closing persists, exit the process before restarting.
+No real camera, lock, or spreadsheet application is exercised by the automated tests. Check the live detector locally in Observe only mode before deciding whether to arm an action. Some native camera drivers can block; if Closing persists, exit the process before restarting. Desktop actions run serially; a stalled Windows action can delay status and Stop responses.
 
 ## Privacy and security
 

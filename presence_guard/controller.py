@@ -38,6 +38,7 @@ class Controller:
         self.worker = None
         self.stop_event = threading.Event()
         self.camera_closing = False
+        self.camera_running = False
 
     def allowed_modes(self):
         return [mode for mode in MODES if self.actions.demo or mode == "observe"
@@ -55,7 +56,7 @@ class Controller:
                 raise GuardError("This action was not enabled at launch")
             if self.guard.active:
                 raise GuardError("Stop and disarm before changing modes")
-            if self.camera_closing or (self.worker is not None and self.worker.is_alive()):
+            if self.camera_closing or self.camera_running:
                 raise GuardError("Wait for the camera to finish closing")
             self.mode = mode
             self.guard = Presence()
@@ -68,10 +69,20 @@ class Controller:
             if self.camera_enabled:
                 if self.camera_runner is None:
                     self.guard.command("stop", self.clock())
+                    self._record("Camera adapter unavailable. Session disarmed.")
                     raise GuardError("Camera adapter unavailable")
                 session = self.session
                 self.worker = threading.Thread(target=self._camera_run, args=(session, self.stop_event), daemon=True)
-                self.worker.start()
+                self.camera_running = True
+                try:
+                    self.worker.start()
+                except (RuntimeError, OSError):
+                    self.camera_running = False
+                    self.worker = None
+                    self.stop_event.set()
+                    self.guard.command("stop", self.clock())
+                    self._record("Camera adapter unavailable. Session disarmed.")
+                    raise GuardError("Camera adapter unavailable") from None
             else:
                 self._pulse_locked()
             return self.snapshot()
@@ -85,6 +96,7 @@ class Controller:
         finally:
             with self.lock:
                 if session == self.session:
+                    self.camera_running = False
                     self.camera_closing = not closed
                     if self.guard.active:
                         self._run(self.guard.fail("Camera unavailable", self.clock()))
@@ -94,7 +106,7 @@ class Controller:
         with self.lock:
             self.guard.command("stop", self.clock())
             self.stop_event.set()
-            self.camera_closing = self.camera_closing or bool(self.worker is not None and self.worker.is_alive())
+            self.camera_closing = self.camera_closing or self.camera_running
             self._record("Stopped and disarmed")
             return self.snapshot()
 
