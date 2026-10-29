@@ -1,0 +1,4 @@
+*.cmd text eol=crlf
+presence_guard/presence.py -text
+presence_guard/actions.py -text
+requirements-camera.txt text eol=lf

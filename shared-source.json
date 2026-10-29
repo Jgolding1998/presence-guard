@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source_project": "jarvis-workbench",
+  "files": [
+    {
+      "source_path": "jarvis/presence.py",
+      "vendored_path": "presence_guard/presence.py",
+      "sha256": "446d2ffd62c09f707329bc740878721ad7ff7aa1beed1e6c54c0045a72cfd503"
+    },
+    {
+      "source_path": "jarvis/actions.py",
+      "vendored_path": "presence_guard/actions.py",
+      "sha256": "4e5ae0334219b9b88f7f962e9adeabfb3f3dc5014203e9cc4229c58286d96d66"
+    }
+  ]
+}
