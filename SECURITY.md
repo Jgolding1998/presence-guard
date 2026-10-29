@@ -22,6 +22,8 @@ After fresh frames stop for over 5 seconds, an active Privacy lock session reque
 
 Windows may reject a lock or workbook-open request. Failures are shown in the dashboard; a successful request does not verify the workstation is locked. The shared action latch prevents repeated attempts for the same condition, including after failure. Use the operating system's own auto-lock and inspect failures locally. A blocked native camera driver can delay cooperative shutdown; close the process if release does not finish. Closing the browser tab alone does not disarm the guard.
 
+One separate worker handles real desktop requests without holding the policy lock. Stop and status remain responsive. Stop can cancel a request before the worker commits to it; after commitment, the request may still take effect. No new session can start until it finishes. Extra triggers are skipped visibly rather than queued, including if the outstanding request later fails. Shutdown disarms and uses one shared bounded wait for camera and action workers. It cannot terminate a blocked native call. Closed controllers reject restart.
+
 ## Reporting
 
 Use the [central feedback form](https://github.com/Jgolding1998/Jgolding1998/issues/new?template=feedback.yml). Provide the affected version, platform, synthetic reproduction, and expected behavior. Do not post credentials, private images, personal data, or working exploit details involving another person's system. For sensitive vulnerabilities, use the repository host's private vulnerability reporting feature when available before publishing details.

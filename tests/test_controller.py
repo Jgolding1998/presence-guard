@@ -26,6 +26,12 @@ class FakeActions:
 
 
 class ControllerTests(unittest.TestCase):
+    def wait_action(self, service):
+        worker = service.action_thread
+        if worker is not None:
+            worker.join(1)
+            self.assertFalse(worker.is_alive(), "Desktop request did not finish")
+
     def setUp(self):
         self.clock = Clock()
         self.actions = FakeActions()
@@ -55,9 +61,11 @@ class ControllerTests(unittest.TestCase):
                     self.assertTrue(entered.wait(1))
                     clock.now=5
                     service.pulse()
+                    self.wait_action(service)
                     self.assertEqual(actions.calls, [])
                     clock.now=5.01
                     service.pulse()
+                    self.wait_action(service)
                     state=service.snapshot()
                     self.assertEqual(actions.calls, ["lock_camera_fault"])
                     self.assertEqual(state["last_action"]["reason"], "Camera did not report its first frame within 5 seconds")
@@ -65,6 +73,7 @@ class ControllerTests(unittest.TestCase):
                     self.assertIsNone(state["people"])
                     clock.now=6
                     service.pulse()
+                    self.wait_action(service)
                     self.assertEqual(len(actions.calls), 1)
                 finally:
                     service.close()
@@ -83,6 +92,7 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(entered.wait(1))
             self.clock.now=5.01
             service.pulse()
+            self.wait_action(service)
             self.assertEqual(actions.calls, ["lock_camera_fault"])
             self.assertEqual(service.snapshot()["last_action"]["reason"], "Camera stopped reporting for over 5 seconds")
         finally:
@@ -145,6 +155,7 @@ class ControllerTests(unittest.TestCase):
         service = Controller(camera=True, actions=actions, clock=self.clock, camera_runner=runner)
         service.start("privacy")
         service.worker.join(1)
+        self.wait_action(service)
         self.assertEqual(actions.calls, ["lock_camera_fault"])
         self.assertEqual(service.snapshot()["last_action"]["status"], "requested")
 
@@ -216,6 +227,7 @@ class ControllerTests(unittest.TestCase):
                 service.start("observe")
             released.set()
             service.worker.join(1)
+            self.wait_action(service)
             self.assertFalse(service.snapshot()["camera_closing"])
         finally:
             released.set()
@@ -226,6 +238,7 @@ class ControllerTests(unittest.TestCase):
                              camera_runner=lambda *args: False)
         service.start("observe")
         service.worker.join(1)
+        self.wait_action(service)
         service.stop()
         self.assertTrue(service.snapshot()["camera_closing"])
         with self.assertRaises(GuardError):
@@ -241,6 +254,7 @@ class ControllerTests(unittest.TestCase):
         service = Controller(camera=True, actions=actions, clock=self.clock, camera_runner=runner)
         service.start("privacy")
         service.worker.join(1)
+        self.wait_action(service)
         state = service.snapshot()
         self.assertTrue(state["camera_closing"])
         self.assertTrue(state["active"])
@@ -248,6 +262,7 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(state["camera"], "fault")
         self.clock.now = 5.01
         service.pulse()
+        self.wait_action(service)
         self.assertEqual(actions.calls, ["lock_camera_fault"])
         state = service.stop()
         self.assertFalse(state["active"])
@@ -314,6 +329,7 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(entered.wait(1))
             service.stop()
             service.worker.join(1)
+            self.wait_action(service)
             entered.clear()
             service.start("privacy")
             self.assertTrue(entered.wait(1))

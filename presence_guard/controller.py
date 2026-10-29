@@ -39,6 +39,11 @@ class Controller:
         self.stop_event = threading.Event()
         self.camera_closing = False
         self.camera_running = False
+        self.action_thread = None
+        self.action_running = False
+        self.action_committed = False
+        self.action_started_at = None
+        self.closed = False
 
     def allowed_modes(self):
         return [mode for mode in MODES if self.actions.demo or mode == "observe"
@@ -52,6 +57,10 @@ class Controller:
         if type(mode) is not str or mode not in MODES:
             raise GuardError("Choose an available mode")
         with self.lock:
+            if self.closed:
+                raise GuardError("This guard has closed; launch a new process")
+            if self.action_running:
+                raise GuardError("Wait for the desktop request to return before restarting")
             if mode not in self.allowed_modes():
                 raise GuardError("This action was not enabled at launch")
             if self.guard.active:
@@ -92,13 +101,13 @@ class Controller:
         try:
             closed = self.camera_runner(self, session, stop) is True
         except Exception:
-            self.camera_fault(session)
+            pass
         finally:
             with self.lock:
                 if session == self.session:
                     self.camera_running = False
                     self.camera_closing = not closed
-                    if self.guard.active:
+                    if self.guard.active and not self.closed:
                         self._run(self.guard.fail("Camera unavailable", self.clock()))
                         self._record("Camera unavailable. Stop and check the local camera adapter.")
 
@@ -107,14 +116,20 @@ class Controller:
             self.guard.command("stop", self.clock())
             self.stop_event.set()
             self.camera_closing = self.camera_closing or self.camera_running
+            if self.action_running and self.action_committed:
+                self.last_action = {**self.last_action, "message": "Disarmed. A desktop request already began; Stop cannot cancel it"}
             self._record("Stopped and disarmed")
             return self.snapshot()
 
     def close(self, timeout=2):
-        self.stop()
-        worker = self.worker
-        if worker is not None:
-            worker.join(timeout)
+        deadline = time.monotonic() + max(0, timeout)
+        with self.lock:
+            self.closed = True
+            self.stop()
+            workers = (self.worker, self.action_thread)
+        for worker in workers:
+            if worker is not None and worker is not threading.current_thread():
+                worker.join(max(0, deadline - time.monotonic()))
 
     def set_demo(self, people):
         if people is not None and (type(people) is not int or people not in (0, 1, 2)):
@@ -130,19 +145,69 @@ class Controller:
         for action in actions:
             reason = ("Camera did not report its first frame within 5 seconds"
                       if action == "lock_camera_fault" and self.guard.last_frame is None else ACTION_LABELS[action])
-            try:
-                self.actions.run(action)
-            except Exception:
-                message = ("Workbook could not be opened. Check the workstation locally" if action == "boss_alert"
-                           else "Lock request failed. Windows may still be unlocked; check locally")
-                self.last_action = {"status": "failed", "reason": reason, "message": message}
-                self._record(message + ".")
+            if self.closed:
+                return
+            if self.actions.demo:
+                self._complete_action(action, reason, self._call_action(action))
+            elif self.action_running:
+                self._record("Additional trigger skipped: a desktop request is already outstanding.")
             else:
-                message = ("Simulated: " if self.actions.demo else "Requested: ") + (
-                    "synthetic Boss Alert workbook" if action == "boss_alert" else "Windows lock")
-                self.last_action = {"status": "simulated" if self.actions.demo else "requested",
-                                    "reason": reason, "message": message}
-                self._record(message)
+                self.action_running = True
+                self.action_committed = False
+                self.action_started_at = time.monotonic()
+                self.last_action = {"status": "in_progress", "reason": reason,
+                                    "message": "Desktop request pending"}
+                self.action_thread = threading.Thread(target=self._perform_action, args=(action, reason, self.session),
+                                                      name="presence-desktop-action", daemon=True)
+                try:
+                    self.action_thread.start()
+                except (RuntimeError, OSError):
+                    self.action_running = False
+                    self.action_started_at = None
+                    self.action_thread = None
+                    self._complete_action(action, reason, False)
+
+    def _call_action(self, action):
+        try:
+            self.actions.run(action)
+            return True
+        except Exception:
+            return False
+
+    def _complete_action(self, action, reason, successful, *, stopped=False):
+        if not successful:
+            message = ("Workbook could not be opened. Check the workstation locally" if action == "boss_alert"
+                       else "Lock request failed. Windows may still be unlocked; check locally")
+            status = "failed"
+        else:
+            message = ("Simulated: " if self.actions.demo else "Requested: ") + (
+                "synthetic Boss Alert workbook" if action == "boss_alert" else "Windows lock")
+            status = "simulated" if self.actions.demo else "requested"
+        if stopped:
+            message += ". This request began before Stop"
+        self.last_action = {"status": status, "reason": reason, "message": message}
+        self._record(message)
+
+    def _perform_action(self, action, reason, session):
+        committed, successful = False, False
+        try:
+            with self.lock:
+                if self.closed or session != self.session or self.stop_event.is_set() or not self.guard.active:
+                    self.last_action = {"status": "cancelled", "reason": reason,
+                                        "message": "Desktop request cancelled before it began"}
+                    self._record(self.last_action["message"])
+                    return
+                self.action_committed = committed = True
+                self.last_action = {"status": "in_progress", "reason": reason,
+                                    "message": "Desktop request in progress. Stop disarms future actions but cannot cancel this request"}
+            successful = self._call_action(action)
+        finally:
+            with self.lock:
+                if committed and session == self.session:
+                    self._complete_action(action, reason, successful, stopped=self.stop_event.is_set())
+                self.action_running = False
+                self.action_committed = False
+                self.action_started_at = None
 
     def _pulse_locked(self):
         now = self.clock()
@@ -173,5 +238,7 @@ class Controller:
             state.update({"mode": self.mode, "mode_label": LABELS[self.mode], "demo": self.actions.demo,
                           "allowed_modes": self.allowed_modes(), "demo_people": self.demo_people,
                           "camera_closing": self.camera_closing, "last_action": self.last_action,
+                          "action_running": self.action_running, "closed": self.closed,
+                          "action_seconds": round(max(0, time.monotonic() - self.action_started_at), 1) if self.action_running else 0,
                           "events": list(self.events)})
             return state

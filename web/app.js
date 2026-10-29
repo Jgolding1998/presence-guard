@@ -55,16 +55,17 @@
   function render(next) {
     state = next;
     const closing = state.camera_closing && !state.active;
+    const requesting = state.action_running;
     $("source-badge").textContent = state.demo ? "DEMO / NO CAMERA" : "LOCAL CAMERA";
     $("demo-controls").hidden = !state.demo;
     for (const option of $("mode").options) option.disabled = !state.allowed_modes.includes(option.value);
     if (!state.allowed_modes.includes($("mode").value) || state.active) $("mode").value = state.mode;
-    $("mode").disabled = busy || !connected || state.active || state.camera_closing;
-    $("start").disabled = busy || !connected || state.active || state.camera_closing;
+    $("mode").disabled = busy || !connected || state.active || state.camera_closing || requesting || state.closed;
+    $("start").disabled = busy || !connected || state.active || state.camera_closing || requesting || state.closed;
     $("stop").disabled = busy || !connected || !(state.active || state.camera_closing || state.lock_armed || state.sheet_armed);
-    $("safetybar").hidden = !(state.active || state.camera_closing);
+    $("safetybar").hidden = !(state.active || state.camera_closing || requesting);
     $("quick-stop").disabled = busy || !connected;
-    $("session-label").textContent = !connected ? "Connection lost. State unknown." : closing ? "Disarmed / camera closing" : state.mode_label + (state.demo ? " / simulation" : " / active");
+    $("session-label").textContent = !connected ? "Connection lost. State unknown." : requesting ? "Desktop request outstanding" : closing ? "Disarmed / camera closing" : state.active ? state.mode_label + (state.demo ? " / simulation" : " / active") : "Disarmed";
     const pill = $("active-pill");
     pill.textContent = closing ? "Closing" : state.active ? "Active" : "Inactive";
     pill.classList.toggle("active", state.active);
@@ -72,11 +73,11 @@
     const fault = state.active && state.camera === "fault";
     $("status-orbit").classList.toggle("on", state.active);
     $("status-orbit").classList.toggle("fault", fault);
-    $("status-heading").textContent = closing ? "Camera is closing." : !state.active ? "Ready when you are." : fault ? "Camera unavailable." : "Guard is watching.";
-    $("status-detail").textContent = closing ? "Actions are disarmed. If this persists, close the terminal before restarting." : !state.active ? "Select a mode, then press Start." : fault ? "People count is unknown. Privacy mode uses the camera fault rule." : state.demo ? "Synthetic observations only. No devices or desktop actions." : "Frames are processed locally, then discarded.";
+    $("status-heading").textContent = requesting ? "Desktop request in progress." : state.closed ? "Guard has closed." : closing ? "Camera is closing." : !state.active ? "Ready when you are." : fault ? "Camera unavailable." : "Guard is watching.";
+    $("status-detail").textContent = requesting ? "Stop disarms future actions but cannot cancel a request that already began." + (state.action_seconds >= 10 ? " The desktop request has not returned. Check the workstation locally; restart the process if it persists." : "") : state.closed ? "Launch a new process to start another session." : closing ? "Actions are disarmed. If this persists, close the terminal before restarting." : !state.active ? "Select a mode, then press Start." : fault ? "People count is unknown. Privacy mode uses the camera fault rule." : state.demo ? "Synthetic observations only. No devices or desktop actions." : "Frames are processed locally, then discarded.";
     $("camera-state").textContent = closing ? "Closing" : !state.active ? "Closed" : fault ? "Fault" : state.camera === "receiving" ? (state.demo ? "Synthetic" : "Receiving") : "Starting";
     $("people-count").textContent = state.people === null ? "Unknown" : String(state.people);
-    $("permission-state").textContent = !state.active || state.mode === "observe" ? "Disarmed" : state.demo ? "Simulated" : state.mode === "privacy" ? "Lock armed" : "Workbook armed";
+    $("permission-state").textContent = requesting ? "Request outstanding" : !state.active || state.mode === "observe" ? "Disarmed" : state.demo ? "Simulated" : state.mode === "privacy" ? "Lock armed" : "Workbook armed";
     $("absence-time").firstChild.textContent = fault ? "Unknown " : Number(state.absent_seconds).toFixed(1) + "s ";
     $("absence-progress").value = fault ? 0 : Math.min(30, state.absent_seconds);
     $("absence-note").textContent = fault ? "A camera fault is not proof of absence. The absence timer is not used while frames are stale." : !state.established ? "The absence timer starts only after at least one person is observed." : state.people === 0 ? "Fresh observations show no person. Re-entry resets this timer." : "Presence established. The absence timer is clear.";

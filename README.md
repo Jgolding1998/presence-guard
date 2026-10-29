@@ -59,7 +59,9 @@ The camera adapter uses OpenCV's built-in [HOG people detector](https://docs.ope
 
 Privacy mode requests `LockWorkStation` through the Windows API. A successful call is a request, not proof that Windows locked. Action failures remain visible; the shared policy latches a fired action instead of retrying continuously. Boss Alert is an explicitly playful demo, not a way to conceal activity or identify a manager. The workbook contains no real work or personal data.
 
-No real camera, lock, or spreadsheet application is exercised by the automated tests. Check the live detector locally in Observe only mode before deciding whether to arm an action. Some native camera drivers can block; if Closing persists, exit the process before restarting. Desktop actions run serially; a stalled Windows action can delay status and Stop responses.
+No real camera, lock, or spreadsheet application is exercised by the automated tests. Check the live detector locally in Observe only mode before deciding whether to arm an action. Some native camera drivers can block; if Closing persists, exit the process before restarting.
+
+Real desktop requests run one at a time on a separate worker, so status and Stop remain available if Windows stalls. Stop cancels a pending request before it begins and disarms future actions. It cannot undo a request that already began. The dashboard keeps that request visible and blocks Start until it returns; a request that never returns requires restarting the process. Additional triggers while a request is outstanding are recorded as skipped, with no queue or automatic retry. A completed lock request still does not prove Windows locked.
 
 ## Privacy and security
 

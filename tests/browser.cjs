@@ -119,7 +119,7 @@ async function main() {
     let fixtureState = armedFault;
     await fixturePage.route("**/api/status", (route) => route.fulfill({json: fixtureState}));
     await fixturePage.route("**/api/stop", (route) => {
-      fixtureState = {...armedFault, active: false, lock_armed: false};
+      fixtureState = {...fixtureState, active: false, lock_armed: false};
       return route.fulfill({json: fixtureState});
     });
     await fixturePage.goto(origin);
@@ -138,6 +138,26 @@ async function main() {
     check(await fixturePage.locator("#permission-state").textContent() === "Disarmed", "Stopped release failure reports disarmed permissions");
     check((await fixturePage.locator("#status-detail").textContent()).startsWith("Actions are disarmed."), "Closing text is reserved for a stopped session");
     await fixturePage.screenshot({path: path.join(captureDir, "camera-cleanup.png"), fullPage: true});
+    fixtureState = {...armedFault, camera_closing: false, action_running: true, action_seconds: 11,
+      last_action: {status: "in_progress", reason: "Camera fault", message: "Desktop request in progress. Stop cannot cancel a request that already began"}};
+    await fixturePage.waitForFunction(() => document.querySelector("#permission-state").textContent === "Request outstanding");
+    check(await fixturePage.locator("#start").isDisabled(), "Cannot start over an outstanding desktop request");
+    check(await fixturePage.locator("#mode").isDisabled(), "Cannot change modes over an outstanding desktop request");
+    check(await fixturePage.locator("#stop").isEnabled(), "Stop remains available during a desktop request");
+    check((await fixturePage.locator("#status-detail").textContent()).includes("has not returned"), "Stalled request explains local recovery");
+    await fixturePage.locator("#stop").click();
+    await fixturePage.waitForFunction(() => document.querySelector("#active-pill").textContent === "Inactive");
+    check(await fixturePage.locator("#permission-state").textContent() === "Request outstanding", "Stop does not claim an outstanding request disappeared");
+    check(await fixturePage.locator("#start").isDisabled(), "Restart stays blocked after Stop until the request finishes");
+    check((await fixturePage.locator("#status-detail").textContent()).includes("cannot cancel"), "Stop limitation remains explicit");
+    await fixturePage.screenshot({path: path.join(captureDir, "desktop-request-stopped.png"), fullPage: true});
+    fixtureState = {...fixtureState, action_running: false, action_seconds: 0,
+      last_action: {status: "requested", reason: "Camera fault", message: "Requested: Windows lock. This request began before Stop"}};
+    await fixturePage.waitForFunction(() => document.querySelector("#start").disabled === false);
+    check(await fixturePage.locator("#permission-state").textContent() === "Disarmed", "Completed request releases restart without rearming");
+    fixtureState = {...fixtureState, closed: true};
+    await fixturePage.waitForFunction(() => document.querySelector("#status-heading").textContent === "Guard has closed.");
+    check(await fixturePage.locator("#start").isDisabled(), "Closed process cannot restart from its dashboard");
     await fixturePage.close();
     server.kill();
     await page.waitForFunction(() => document.querySelector("#connection-error").hidden === false);
@@ -146,7 +166,7 @@ async function main() {
     check(pageErrors.length === 0, "No browser script exceptions");
     check(external.length === 0, "No external resources or telemetry");
     check(errors === "", "No server traceback or request logs");
-    console.log(JSON.stringify({checks, pageErrors: pageErrors.length, externalRequests: external.length, screenshots: 4}));
+    console.log(JSON.stringify({checks, pageErrors: pageErrors.length, externalRequests: external.length, screenshots: 5}));
     await context.close();
   } finally {
     if (browser) await browser.close();
