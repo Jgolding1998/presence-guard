@@ -59,7 +59,7 @@ class DesktopTests(unittest.TestCase):
                 opened.assert_called_once()
                 path = opened.call_args.args[0]
                 self.assertEqual(path.name, "Boss Alert.xlsx")
-                self.assertEqual(path.parent.parent.parent, Path(directory) / "runtime")
+                self.assertEqual(path.parent.parent.parent, (Path(directory) / "runtime").resolve())
                 self.assertTrue(path.parent.parent.name.startswith("session-"))
                 runner.run("boss_alert")
                 second = opened.call_args.args[0]
