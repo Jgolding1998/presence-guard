@@ -24,6 +24,8 @@ Windows may reject a lock or workbook-open request. Failures are shown in the da
 
 One separate worker handles real desktop requests without holding the policy lock. Stop and status remain responsive. Stop can cancel a request before the worker commits to it; after commitment, the request may still take effect. No new session can start until it finishes. Extra triggers are skipped visibly rather than queued, including if the outstanding request later fails. Shutdown disarms and uses one shared bounded wait for camera and action workers. It cannot terminate a blocked native call. Closed controllers reject restart.
 
+Responses are flushed before a shared half-close and bounded raw-input discard: at most 16 KiB within one 100-millisecond deadline. Discarded bytes are never parsed or acted on. This preserves early errors for small delayed bodies; larger or later sends can still reset a connection. Admission limits include this cleanup time, and request authorization and size limits are unchanged.
+
 ## Reporting a vulnerability
 
 Use [Security > Report a vulnerability](https://github.com/Jgolding1998/presence-guard/security/advisories/new) to send a private report. Do not submit vulnerability details through the public feedback form.

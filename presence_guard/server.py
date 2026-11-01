@@ -8,6 +8,7 @@ import secrets
 import socket
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,6 +28,31 @@ HEADER_SECONDS = 4
 BODY_SECONDS = 4
 MAX_HEADERS = 8192
 MAX_BODY = 1024
+
+
+def _linger_discard(request):
+    """Half-close, then discard at most 16 KiB within one 100ms deadline.
+
+    Small delayed bodies must not reset an unread early response. Discarded
+    bytes are never parsed or acted on; larger or later sends can still reset.
+    """
+    try:
+        request.shutdown(socket.SHUT_WR)
+    except OSError:
+        return
+    remaining, deadline = 16 * 1024, time.monotonic() + .1
+    while remaining:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        try:
+            request.settimeout(left)
+            block = request.recv(min(4096, remaining))
+        except OSError:
+            return
+        if not block:
+            return
+        remaining -= len(block)
 
 
 class Deadline:
@@ -79,6 +105,13 @@ class LocalServer(ThreadingHTTPServer):
         connection, address = super().get_request()
         connection.settimeout(2)
         return connection, address
+
+    def shutdown_request(self, request):
+        # Handler.finish() has flushed any response before shared socket cleanup.
+        try:
+            _linger_discard(request)
+        finally:
+            super().shutdown_request(request)
 
     def process_request(self, request, address):
         if not self.slots.acquire(blocking=False):
